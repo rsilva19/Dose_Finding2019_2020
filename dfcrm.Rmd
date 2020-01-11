@@ -1,0 +1,84 @@
+---
+title: "dfCRM Package"
+author: "Rebecca Silva"
+date: "10/30/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dfcrm)
+```
+https://cran.r-project.org/web/packages/dfcrm/dfcrm.pdf
+
+# crm used to compute dose for next patient 
+```{r}
+# arguments 
+n = 9
+prior = c(0.02, 0.065, 0.10, 0.20, 0.33, 0.65) # DLT prob for each dose level 
+target = 0.30 # prob experience DLT 
+tox = c(1, 0, 0, 1, 1, 0, 1, 1, 0) # patient's observations (1 = tox, 0 = no tox)
+dose = c(4, 3, 4, 5, 4, 3, 3, 3, 2)
+
+# uses empiric model d^exp(B) by default
+foo <- dfcrm::crm(prior, target, tox, level = dose, n)
+foo$mtd # next recommended dose 
+foo$ptox # updated estimates of toxicity rates
+dose_recommened = which.min(abs(foo$ptox-target)) # same as foo$mtd
+
+
+output = vector("vector", length = 3)
+for (n in 1:6){
+  recommended_dose = crm(n, prior, target, tox, dose)
+  
+}
+```
+
+# crm simulator - sims under a specified dose-toxicity configuration 
+```{r}
+# arguments 
+PI = c(0.10, 0.20, 0.40, 0.50, 0.60, 0.65) # true tox prob 
+prior = c(0.05, 0.10, 0.20, 0.35, 0.50, 0.70)
+target = 0.2
+mcohort = 3 # patient group that starts tg before model update 
+# x0 <- c(rep(1,3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,9)) <- for more than 1 stage 
+nsim = 10
+
+foo2 = crmsim(PI, prior, target, n = 24, mcohort, nsim=10)
+foo2$final.est # model parameter of simulated trials 
+foo2$MTD
+```
+
+# titecrm - computes dose for nxt patient with weights
+```{r}
+weights = c(50, 73, 66, 35, 28, 126) / 126
+foo <- titecrm(prior, target, tox, level = dose, n, weights = weights)
+foo$mtd
+```
+
+# titesim 
+
+# other functions: 
+getn, cohere, getprior 
+
+# visuals 
+```{r}
+foo2 = titesim(PI, prior, target, n = 24, mcohort, nsim=10)
+foo2$MTD
+foo2$s
+```
+
+
+
+# trialr package
+```{r}
+library(trialr)
+
+fit <- stan_crm(skeleton = c(0.05, 0.12, 0.25, 0.40, 0.55), target = 0.25,
+                doses_given = c(3, 3, 3, 3),
+                tox = c(0, 0, 0, 0),
+                weights = c(73, 66, 35, 28) / 126,
+                model = 'empiric', beta_sd = sqrt(1.34), seed = 123)
+```
+
+

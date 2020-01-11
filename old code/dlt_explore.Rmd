@@ -1,0 +1,52 @@
+---
+title: "Untitled"
+author: "Rebecca Silva"
+date: "11/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# compare w table 2
+ae_table2 = c("NEUROPATHY","DIARRHEA", "CONSTIPATION", "NAUSEA", "VOMMITING", "ANOREXIA", "ANEMIA", "NEUTROPENIA", "THROMBOCYTOPENIA", "FATIGUE", "RASH", "MYALGIA", "HEADACHE", "INSOMNIA", "EDEMA", "DYSPNEA")
+
+table2_data =
+  data_tox %>% 
+  filter(course_number %in% c(1,2), 
+         attribution %in% c(3,4,5), 
+         ae_description %in% ae_table2, 
+         grade %in% c(3,4)) %>% 
+  group_by(ae_description, grade) %>% 
+  summarise(n_data = n())
+
+# add 2 patients w neuropathy that progressed to grade 3 after cycle 2 - only see 1 in course# 1 so its accounted for 
+data_tox %>% 
+  filter(attribution %in% c(3,4,5), 
+         ae_description ==  "NEUROPATHY", 
+         grade == 3)
+
+table2_reported = tibble(
+  ae_description = c("NEUROPATHY","DIARRHEA", "CONSTIPATION", "NAUSEA", "THROMBOCYTOPENIA", "FATIGUE"), 
+  n_reported = c(3,3,0,1,2,2)
+)
+
+left_join(table2_data, table2_reported, by = "ae_description")
+
+
+```
+
+```{r}
+#entry = data_tox_dlt %>% 
+  mutate(dlt_tox = ifelse(is.na(dlt_tox), 0, dlt_tox), 
+         date = as.Date(drug_administration_date, format="%d-%b-%y")) %>% 
+  distinct(patient_id, date, dlt_tox) %>% 
+  arrange(date) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(date)) %>% 
+  filter(earliest_date == 1, dlt_tox == 0) %>% 
+  select(-earliest_date)
+```
+

@@ -1,0 +1,65 @@
+---
+title: "Doses"
+author: "Rebecca Silva"
+date: "11/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, get table of n per dose}
+data_dose = 
+  data_dose %>% 
+  select(patient_id, course_number, drug_administration_date, dose_level)
+
+patient_doses = 
+  data_dose %>% 
+  filter(course_number ==1) %>%
+  mutate(dose_level = if_else(patient_id == "9909-N032", 1.9, dose_level)) %>% 
+  distinct(patient_id, dose_level)
+  
+
+data_dose %>% 
+  filter(dose_level== .8, course_number ==1) %>% 
+  distinct(patient_id, drug_administration_date)
+
+
+# 9909-N032 counted twice: in 1.9 and 1.75 - will remove from 1.75
+patient_doses %>% 
+  filter(dose_level == 1.75) 
+data_dose = 
+  data_dose %>% 
+  filter(!(patient_id == "9909-N032" & dose_level == 1.75))
+
+# table: number per dose - matches paper after removal above  
+patient_doses %>% 
+  group_by(dose_level) %>%
+  summarise(n = n())
+
+```
+
+```{r, plot 1}
+
+plot_data = 
+  data_dose %>% 
+  mutate(drug_administration_date = as.Date(drug_administration_date, format="%d-%b-%y")) %>% 
+  group_by(patient_id) %>% 
+  filter(course_number == 1, 
+         drug_administration_date == min(drug_administration_date)) %>% 
+  arrange(drug_administration_date)
+
+plot_data %>% 
+  ggplot(aes(x = drug_administration_date, y = dose_level)) + 
+  geom_point(aes(shape = 4)) +
+  scale_shape_identity() +
+  scale_y_continuous(
+    breaks = c(0.25, 0.80, 1.0, 1.20, 1.45, 1.90), 
+    labels = c("0.25", "0.80", "1.0", "1.20", "1.45", "1.90")) +
+  labs(
+    x = "Time", 
+    y = "Dose Level"
+  )
+```
+

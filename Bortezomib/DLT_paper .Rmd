@@ -1,0 +1,179 @@
+---
+title: "DLTs"
+author: "Rebecca Silva"
+date: "11/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+"grade 4 hematologic toxicity, febrile neureopenia, or grade 3 or 4 nonhemotologic tox occurring during the first 2 cycles (28 days) of therapy"
+
+- attribution 3-5
+toxicities (from table 2): neuropathy, diarrhea, constipation, nausea, vomiting, anorexia, anemia, neutropenia, thrombocytopenia, fatigue, rash, myalgia, headache, insomnia, edema, dyspnea
+
+explore toxicities : 
+```{r}
+# patient who started at 1.9 experienced 1 dlt at 1.75 but not in table (constipation)
+data_tox %>% 
+  filter(patient_id == "9909-N032", course_number %in% c(1, 2), grade == 3, attribution %in% c(3,5)) 
+```
+
+
+ae desscriptions different from ones in table, but in paper authors describe some that would not be attributed to to drug although coded with high attribution. 
+```{r}
+# all possible toxs: 18 obs - more than in table 
+data_tox %>% 
+  filter(course_number %in% c(1,2), 
+         attribution %in% c(3,5),
+         grade %in% c(3,4)) %>% 
+  group_by(ae_description) %>% 
+  distinct(ae_description, grade, attribution)
+  summarise(n= n())
+
+
+course_number %in% c(1,2), 
+         attribution %in% c(3:5),
+         grade %in% c(3,4), 
+         patient_id != "9909-N032", 
+         !(is.na(onset_date))) %>% 
+  mutate(ae_description = recode(ae_description, "PERIPHERAL NEUROPATHY SENSORY" = "NEUROPATHY"))
+
+# n total patients: 11
+data_tox %>% 
+  filter(course_number %in% c(1,2), 
+         attribution %in% c(3,5),
+         grade %in% c(3,4)) %>% 
+  group_by(patient_id) %>% 
+  summarise(n_tox= n())
+```
+
+```{r}
+dlt_data = left_join( data_tox, patient_doses, by = "patient_id") 
+
+#remove unnecessary columns
+dlt_data = 
+  dlt_data %>% 
+  select(-dlt, -protocol, -ctcae_code, -c(serious:outcome))
+
+dlt_data = dlt_data %>% 
+  filter(str_detect(ae_description, "NEURO") |
+           str_detect(ae_description, "DIARRHEA") |
+           str_detect(ae_description, "CONSTIPATION") |
+           str_detect(ae_description, "NAUSEA") |
+           str_detect(ae_description, "THROMBO") |
+           str_detect(ae_description, "FATIGUE")|
+           str_detect(ae_description, "ANEMIA"), 
+         course_number %in% c(1,2), 
+         attribution %in% c(3:5),
+         grade %in% c(3,4), 
+         patient_id != "9909-N032", 
+         !(is.na(onset_date))) %>% 
+  mutate(ae_description = recode(ae_description, "PERIPHERAL NEUROPATHY SENSORY" = "NEUROPATHY"))
+
+
+
+
+tab2_data = dlt_data %>% 
+  group_by(patient_id, ae_description, dose_level, grade) %>% 
+  distinct(patient_id, ae_description, dose_level, grade) %>% # take out if patient had same tox 2x
+  group_by(ae_description, dose_level, grade) %>% 
+  summarise(n= n()) %>% 
+  pivot_wider(
+    names_from = dose_level, 
+    values_from = n) %>% 
+  mutate_all(~replace(., is.na(.), 0)) %>% 
+  select(ae_description, grade, `1.2`, `1.75`, `1.9`)
+
+ #seems like some of toxs should be included like lymphopenia bc its a hema?
+
+# will match after... (except for fatigue)
+#   - take out data for patient started at 1.9 and moved to 1.75 (for constipation)
+#   - add patient who developed neuropathy progression after 28 days
+#   - if remove patient w onset data NA for THROMBOCYTOPENIA
+
+test = left_join( data_tox, patient_doses, by = "patient_id")
+test %>% filter(dose_level == 1.9, course_number > 2) 
+dlt_data %>% filter(dose_level == 1.9, course_number > 2) %>%  
+  distinct(patient_id, dose_level)
+
+
+
+# this shows that there are other toxicities (grade 4 non-hema, with high attribtuion not labeled in table 2)
+# confused because should non-hema be grade 3, 4 - doesnt match table 2 where only grade 3 non-hema, and hema should only be grade 4?
+data_tox %>% 
+  filter(grade ==4, attribution %in% c(3:5)) 
+```
+
+```{r}
+# hema: "A hematologic toxicity is defined as neutropenia, anemia, leukopenia, lymphopenia,
+# and/or thrombocytopenia."
+```
+
+
+**** 
+
+Defining dlts: 
+** not very reproducible because is based on authors table rather than their definition of dlt  
+```{r}
+patient_dlt = dlt_data %>% mutate(dlt_tox = c(rep(1, nrow(.)))) %>% select(-dose_level)
+
+# add dlts
+patient_dlt = left_join(data_tox, patient_dlt)
+# add doses
+data_tox_dlt = left_join(patient_dlt, patient_doses, by = "patient_id")
+
+# add drug_administration_data 
+drug_admin = data_dose %>% select(patient_id, drug_administration_date)
+data_tox_dlt = left_join(data_tox_dlt, drug_admin, by = "patient_id")
+
+ 
+```
+
+
+
+***
+
+figure out why missing dlts (none in 1.9) 
+```{r}
+ test = 
+  data_tox %>%
+  mutate(ae_description = recode(ae_description, "PERIPHERAL NEUROPATHY SENSORY" = "NEUROPATHY"), 
+         ae_description = recode(ae_description, "NEUROPATHY-B/L FEET" = "NEUROPATHY"),
+         ae_description = recode(ae_description, "NEUROPATHY (HANDS & FEET)" = "NEUROPATHY"),
+         ae_description = recode(ae_description, "INC NEUROPATHY B/L ANKLES-LWR BAK" = "NEUROPATHY"),
+         ae_description = recode(ae_description, "PERIPH NEUROPATHY LHAND-ELBOW" = "NEUROPATHY"), 
+         ae_description = recode(ae_description, "PERIPH NEUROPATHY LHAND-ELBOW" = "NEUROPATHY"), 
+         ae_description = recode(ae_description, "WEAK/FATIGUE" = "FATIGUE"), 
+         ae_description = recode(ae_description, "FATIGUE/LETHARGY" = "FATIGUE"),
+         ae_description = recode(ae_description, "	THROMBOPENIA" = "THROMBOCYTOPENIA"),) %>% 
+  filter(ae_description %in% c("NEUROPATHY","DIARRHEA", "CONSTIPATION", "NAUSEA", "THROMBOCYTOPENIA", "FATIGUE"),
+         #patient_id  "9909-N032", 
+         !is.na(onset_date), 
+         grade %in% c(3,4), 
+         course_number %in% c(1,2), 
+         attribution %in% c(3:5)) %>% 
+  mutate(dlt_tox = c(rep(1, nrow(.)))) %>%  
+  distinct(patient_id)
+
+#10 total patients experienced dlt 
+
+ data_tox %>% 
+  filter(str_detect(ae_description, "NEUROPATHY") |
+           str_detect(ae_description, "DIARRHEA") |
+           str_detect(ae_description, "CONSTIPATION") |
+           str_detect(ae_description, "NAUSEA") |
+           str_detect(ae_description, "THROMBOCYTOPENIA") |
+           str_detect(ae_description, "FATIGUE"),
+         #patient_id  "9909-N032", 
+         #!is.na(onset_date), 
+         grade %in% c(3,4), 
+         course_number %in% c(1,2), 
+         attribution %in% c(3:5)) %>% 
+  mutate(dlt_tox = c(rep(1, nrow(.)))) %>%  
+  distinct(patient_id)
+
+```
+

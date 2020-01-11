@@ -1,0 +1,175 @@
+---
+title: "CRM_bookcode"
+author: "Rebecca Silva"
+date: "10/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(patchwork)
+```
+
+# Givens of crm 
+```{r}
+n = 6
+prior = c(0.02, 0.065, 0.10, 0.20, 0.33, 0.65) # DLT prob for each dose level 
+target = 0.30 # prob experience DLT 
+tox = c(1, 0, 0, 1, 1, 0) # patient's observations (1 = tox, 0 = no tox)
+dose = c(4, 3, 4, 5, 4, 3)# vector of dose level attrib. to each patient  (starting dose?)
+```
+
+# Functions for Integration 
+```{r}
+lik = function(a){
+  v = 1
+  for(i in (1:length(x1p))){
+    v = v*((x1p[i]^a)^y1p[i]*(1-x1p[i]^a)^(1-y1p[i]))
+    }
+  return(v)
+}
+
+crmf = function(a){  # x = parametor (theta)
+  exp(-a)*lik(a)
+}
+
+crmft = function(a){
+  a*exp(-a)*lik(a)
+}
+```
+
+
+```{r}
+crm_test = function(n, prior, target, tox, dose){
+  ## initialize params 
+  ptox = matrix(NA, nrow = n, ncol = length(prior))
+  recommended = x1p = y1p = rep(0,n)
+  a = 1
+  ## dose allocation procedure 
+  for (i in 1:n){
+    ## global vars 
+    x1p <<- c(prior[dose[1:i]]^1/a) # prop of DLT for each patient 
+    y1p <<- tox[1:i]
+  
+   # post_dist = integrate(x*(exp(-x)*lik(x)/integrate(exp(-x)*lik(x), 0, Inf)))
+   # a = integrate(a*post_dist, 0, Inf)
+    a = integrate(crmft, 0, Inf)[[1]]/integrate(crmf, 0, Inf)[[1]]
+    ## matrix of est. probabilities of responses 
+    ptox[i,] = prior^a
+   
+    ## vector of recommended dose level
+    recommended[i] = which.min(abs(ptox[i,]-target))
+  }
+  return(recommended)
+}
+
+crm_test(n, prior, target, tox, dose)
+```
+
+
+
+
+# CRM Method
+```{r}
+crm_book = function(n, prior, target, tox, dose){
+  ## initialize params 
+  #ptox = matrix(NA, nrow = n, ncol = length(prior))
+  ptox = matrix(NA, nrow = n, ncol = 6)
+  recommended = x1p = y1p = rep(0,n)
+  
+  ## dose allocation procedure 
+  for (i in 1:n){
+    ## global vars 
+    x1p <<- c(prior[dose[1:i]]) # prop of DLT for each patient 
+    y1p <<- tox[1:i]
+  
+   # post_dist = integrate(x*(exp(-x)*lik(x)/integrate(exp(-x)*lik(x), 0, Inf)))
+   # a = integrate(a*post_dist, 0, Inf)
+    a = integrate(crmft, 0, Inf)$value/integrate(crmf, 0, Inf)$value
+    ## matrix of est. probabilities of responses 
+    ptox[i,] = prior^a
+   
+    ## vector of recommended dose level
+    recommended[i] = which.min(abs(ptox[i,]-target))
+  }
+  return(recommended) # can also reutrn ptox (gives prob dlt for each patient and dose)- could return a list
+}
+```
+
+
+```{r}
+crm_book(n, prior, target, tox, dose)
+
+# where does fn specify where to start (MTD)
+
+
+```
+
+# graph
+```{r}
+# data 
+dose_amount = c(10, 20, 40, 80, 120, 160)
+prior_mean = 1 # exp prior
+dose_label = prior^1/prior_mean
+
+data = tibble(
+  dose = dose_amount, 
+  labels = dose_label,
+  pDLT = prior)
+
+fig_dose = 
+  data %>% 
+  ggplot(aes(x = dose, y = pDLT)) + 
+  geom_point(color = "red") + 
+  geom_line(color = "black") +
+  labs(
+    x = "Dose mg/m^2",
+    y = "Prior Probability of DLT")
+
+fig_labels = 
+  data %>% 
+  ggplot(aes(x = labels, y = pDLT)) + 
+  geom_point(color = "red") + 
+  geom_line(color = "black") +
+  labs(
+    x = "Dose Labels (pi)",
+    y = "Prior Probability of DLT")
+
+fig_dose + fig_labels
+
+```
+
+```{r}
+n = 6
+prior = c(0.02, 0.065, 0.10, 0.20, 0.33, 0.65) # DLT prob for each dose level 
+target = 0.30 # prob experience DLT 
+tox = c(1, 0, 0, 1, 1, 0) # patient's observations (1 = tox, 0 = no tox)
+dose = c(4, 3, 4, 5, 4, 3)
+
+data = 
+  tibble(
+    id = c(1:n), 
+    tox = tox, 
+    dose_level = dose, 
+    entry_day = c(1, 4, 7, 12, 14, 15)
+  )
+
+data %>% 
+  ggplot(aes(x = id, y = dose_level)) + 
+  geom_point(aes(color = factor(tox), shape = factor(tox))) + 
+  scale_shape_manual(values = c(1, 19)) +
+  scale_colour_manual(values = c("Black", "Red"))
+                                                  
+```
+
+```{r}
+data %>% 
+  ggplot(aes(x = entry_day, y = dose_level)) + 
+  geom_point(aes(color = factor(tox), shape = factor(tox))) + 
+  scale_shape_manual(values = c(1, 19)) +
+  scale_colour_manual(values = c("Black", "Red")) +
+  geom_text(aes(label=id), size=3, nudge_y= -.06)
+```
+
+

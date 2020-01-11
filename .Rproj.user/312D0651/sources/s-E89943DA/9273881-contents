@@ -1,0 +1,200 @@
+---
+title: "Bortezomib- TITE CRM"
+author: "Rebecca Silva"
+date: "11/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+outcome = 
+data_dlt %>% 
+  group_by(patient_id) %>% 
+  summarise(dlt_sum= sum(dlt)) %>% 
+  mutate(dlt_ever = ifelse(dlt_sum == 0, 0, 1)) %>% 
+  ungroup()
+
+end_date_no_dlt = 
+  entry_date %>% 
+  filter(patient_id %in% no_dlt_patients) %>% 
+  mutate(date = bizdays::offset(date, 28)) %>% 
+  select(patient_id, date, dlt)
+
+# arguments 
+n = 9
+prior = c(0.02, 0.065, 0.10, 0.20, 0.33, 0.65) # DLT prob for each dose level 
+target = 0.30 # prob experience DLT 
+tox = c(1, 0, 0, 1, 1, 0, 1, 1, 0) # patient's observations (1 = tox, 0 = no tox)
+dose = c(4, 3, 4, 5, 4, 3, 3, 3, 2)
+weights = c(50, 73, 66, 35, 28, 126) / 126
+
+foo <- titecrm(prior, target, tox, level = dose, n, weights = weights)
+foo$mtd
+```
+
+# assigning weights 
+```{r}
+# figure out how to deal with if no ae in last course 
+# make last date =  last drug admin date for last course number if no ae 
+
+
+## get last course number 
+## rank courses and choose last rank for each patient 
+last_course = 
+  data_dose %>% 
+  group_by(patient_id) %>% 
+  distinct(patient_id, course_number) %>% 
+  mutate(last_course = min_rank(desc(course_number))) %>% 
+  filter(last_course == 1) %>% 
+  rename(last_course_number = course_number) %>% 
+  select(patient_id, last_course_number)
+
+# add last course col to all data
+dose_weights = left_join(bortezomib, last_course, by = "patient_id")
+
+# get last date for ppl with ae in last course date 
+dose_weights32 = 
+  dose_weights %>% 
+  select(patient_id, course_number, onset_date, course_start_date, drug_administration_date, last_course_number) %>% 
+  filter(course_number == last_course_number) %>% 
+  group_by(patient_id) %>% 
+  mutate(onset_date = as.Date(onset_date, format="%d-%b-%y"),
+         rank_onset = min_rank(desc(onset_date))) %>% 
+  filter(rank_onset == 1) %>% 
+  distinct(patient_id, onset_date)
+
+# add entry date = drug admin start date (in plots.rmd)
+dose_weights32 = 
+  inner_join(dose_weights32, entry_date, by = "patient_id") %>% 
+  rename(entry = date) %>% 
+  select(-dlt) %>% 
+  mutate(duration = onset_date - entry)
+
+## ended above (with duration for 32 observations)
+
+
+# get last date for ppl w/o ae in last course date 
+dose_weights2 = 
+  dose_weights %>% 
+  select(patient_id, course_number, onset_date, course_start_date, drug_administration_date, last_course_number) %>% 
+  filter(course_number == last_course_number) %>% 
+  group_by(patient_id) %>% 
+  distinct(patient_id)
+  
+  mutate(last_admin_date = as.Date(drug_administration_date, format="%d-%b-%y"), 
+         rank_last_admin_date = min_rank(desc(last_admin_date))) %>% 
+  filter(rank_last_admin_date == 1) %>% 
+  distinct(patient_id, last_admin_date)
+
+  
+test = 
+  data_dose %>% 
+  group_by(patient_id) %>% 
+  distinct(patient_id, course_number) %>% 
+  mutate(last_course = min_rank(desc(course_number))) %>% 
+  filter(last_course == 1) %>% 
+  select(- last_course)
+
+test = inner_join(bortezomib, test, by = c("patient_id", "course_number"))
+  
+test %>% select(patient_id, course_start_date, drug_administration_date, course_number) %>% group_by(patient_id) %>% summarise(n())
+  
+# if we have their last date DN understand why there is no date on them 
+
+
+
+```
+
+
+
+
+
+# dont care about dlt here.. can be ae at any time 
+```{r}
+
+
+# add last course col to all data
+dose_weights = left_join(bortezomib, last_course, by = "patient_id")
+
+# get last date : 
+# sep for no dlt ever bc have no onset date: take last date we have for them- drug_admin date
+# for yes dlt, get last onset date
+
+dose_weights = 
+  dose_weights %>% 
+  filter(course_number == last_course_number) %>% 
+  group_by(patient_id) %>% 
+  mutate(last_date = ifelse( dlt == 0 , 
+                             as.Date(drug_administration_date, format="%d-%b-%y"), 
+                             as.Date(onset_date, format="%d-%b-%y"), 
+         last_date_rank = min_rank(desc(last_date))) %>% 
+  filter(last_date_rank == 1) %>% 
+  distinct(patient_id, last_onset_date)
+
+
+
+
+
+
+
+
+
+dose_weights %>% 
+  rename(start_date = date) %>% 
+  select(-dlt) %>% 
+  mutate(duration = last_onset_date - start_date)
+```
+
+# dlt stuff
+```{r}
+# get new dlt col  = dlt ever
+dlt = 
+  data_dlt %>% 
+  group_by(patient_id) %>% 
+  summarise(dlt_sum= sum(dlt)) %>% 
+  mutate(dlt_ever = ifelse(dlt_sum == 0, 0, 1)) %>% 
+  distinct(patient_id, dlt_ever)
+
+all_patients = 
+  bortezomib %>% 
+  distinct(patient_id)
+
+all_patients_dlt_allcycles = left_join(all_patients, dlt, "patient_id") %>% 
+  mutate(dlt_ever = replace(dlt, is.na(dlt), 0)
+    
+    tidyr::replace_na(0)) # not working 
+
+###*^^^
+
+
+# add dlt in all cycles to all data 
+bortezomib = left_join(bortezomib, all_patients_dlt_allcycles, by = "patient_id")  
+
+
+# find out when patients dropped out 
+## get last course number 
+## rank courses and choose last rank for each patient 
+last_course = 
+  data_dose %>% 
+  group_by(patient_id) %>% 
+  distinct(patient_id, course_number) %>% 
+  mutate(last_course = min_rank(desc(course_number))) %>% 
+  filter(last_course == 1) %>% 
+  rename(last_course_number = course_number) %>% 
+  select(patient_id, last_course_number)
+
+
+
+# wrong: 
+
+# find first course number to see why only 35 rows - this is bc looking at data_tox  
+data_dose %>%  
+  group_by(patient_id) %>% 
+  mutate(rank = min_rank(course_number)) %>% 
+  filter(rank == 1) %>% 
+  distinct(patient_id, course_number)
+```
+

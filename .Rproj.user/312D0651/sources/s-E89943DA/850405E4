@@ -1,0 +1,33 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1577980876377.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "850405E4",
+    "lastKnownWriteTime" : 7440278028744348948,
+    "last_content_update" : 1577980876377,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "C8200B10",
+        "caption" : "crm_dlt_data",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=crm_dlt_data&cache_key=C8200B10",
+        "displayedObservations" : 579,
+        "environment" : "",
+        "expression" : "crm_dlt_data",
+        "object" : "crm_dlt_data",
+        "preview" : 0,
+        "totalObservations" : 579,
+        "variables" : 13
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 10,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

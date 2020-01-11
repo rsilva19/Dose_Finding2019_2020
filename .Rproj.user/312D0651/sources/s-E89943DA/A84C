@@ -1,0 +1,33 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1577980881304.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "A84C",
+    "lastKnownWriteTime" : 2318265571616178486,
+    "last_content_update" : 1577980881304,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "E2205D00",
+        "caption" : "dlt_data",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=dlt_data&cache_key=E2205D00",
+        "displayedObservations" : "579",
+        "environment" : "",
+        "expression" : "dlt_data",
+        "object" : "dlt_data",
+        "preview" : "0",
+        "totalObservations" : "579",
+        "variables" : "11"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

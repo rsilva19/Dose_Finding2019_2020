@@ -1,0 +1,33 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1578583416405.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "660CE5BE",
+    "lastKnownWriteTime" : 893353197570,
+    "last_content_update" : 1578583416405,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "5D419B36",
+        "caption" : "data_tox",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=data_tox&cache_key=5D419B36",
+        "displayedObservations" : 579,
+        "environment" : "",
+        "expression" : "data_tox",
+        "object" : "data_tox",
+        "preview" : 0,
+        "totalObservations" : 579,
+        "variables" : 15
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 9,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

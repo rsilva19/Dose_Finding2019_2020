@@ -1,0 +1,154 @@
+---
+title: "define_dlt"
+author: "Rebecca Silva"
+date: "11/25/2019"
+output: html_document
+---
+DLT definition : "grade 4 hematologic toxicity, febrile neureopenia, or grade 3 or 4 nonhemotologic tox occurring during the first 2 cycles (28 days) of therapy"
+
+Notes: 
+- keep patient N032 labeled with dose_level 1.9 since that is what they started with (then droped to 1.75 after first dose)
+
+```{r}
+library(tidyverse)
+data_tox = 
+  readxl::read_excel("./data/Protocol0047Tox.xlsx", 
+                          range = "A1:O580") %>%
+  janitor::clean_names() %>% 
+  rename(patient_id = patient)
+
+data_dose = 
+  readxl::read_excel("./data/Protocol0047Dose.xlsx", 
+                          range = "A1:K337") %>%
+  janitor::clean_names() 
+
+
+patient_doses = 
+  data_dose %>% 
+  filter(course_number ==1) %>%
+  mutate(dose_level = if_else(patient_id == "9909-N032", 1.9, dose_level)) %>% 
+  distinct(patient_id, dose_level)
+```
+
+
+Q: why again do we take out aspiration pneumonia
+```{r}
+# get patient ids with dlt
+patient_dlt = 
+  data_tox %>% 
+  filter(course_number %in% c(1,2), 
+         attribution %in% c(3,5),
+         grade %in% c(3,4),
+         ae_description != "ASPIRATION PNEUMONIA") %>% 
+  pull(patient_id)
+
+dlt_data = left_join( data_tox, patient_doses, by = "patient_id") 
+
+#remove unnecessary columns
+dlt_data = 
+  dlt_data %>% 
+  select(-dlt, -protocol, -ctcae_code, -c(serious:outcome))
+
+# new var: dlt_patient: 1 for every obs of patient with dlt ever 
+# new var: dlt_case: 1 if row if a dlt - ** havent made yet **
+dlt_data = 
+  dlt_data %>% 
+  mutate(dlt_patient = if_else(patient_id %in% patient_dlt, 1, 0))
+
+# add start date (course 1 admin date) for each patient
+start_date = 
+  data_dose %>% 
+  mutate(start_date = as.Date(drug_administration_date, format="%d-%b-%y")) %>%
+  group_by(patient_id) %>% 
+  filter(course_number == 1, 
+         start_date == min(start_date)) %>% 
+  select(patient_id, start_date)
+dlt_data =  left_join( dlt_data, start_date, by = "patient_id") 
+```
+
+```{r}
+# plot of entry 
+dlt_data %>%
+  distinct(patient_id, dose_level, dlt_patient, start_date) %>% 
+  ggplot(aes(x = start_date, y = dose_level)) + 
+  geom_point(aes(shape = 4, color = as.factor(dlt_patient)), position = position_jitter(w = 0, h = .01)) +
+  scale_shape_identity() +
+  scale_color_manual(values = c("black", "red")) +
+  scale_y_continuous(
+    breaks = c(0.25, 0.80, 1.0, 1.20, 1.45, 1.75, 1.90), 
+    labels = c("0.25", "0.80", "1.0", "1.20", "1.45", "1.75", "1.90")) +
+  labs(
+    x = "Time", 
+    y = "Dose Level"
+  ) +
+  theme(legend.position = "none") 
+
+```
+
+
+Note: plot of entry does not quite make sense with author's 3+3 design but could be due to when dlts occurred
+
+```{r}
+# dlt plot 
+
+# remove onset_dates for no dlt from patients with dlt 
+# set onset_date 28 days later for no dlt 
+# if onset NA, set as start date 
+# get vars needed for plot 
+# make color var
+plot_data = 
+  dlt_data %>%
+  filter((dlt_patient == 1 & course_number %in% c(1,2) & grade %in% c(3,4) & attribution %in% c(3:5)) |dlt_patient == 0) %>% 
+  mutate(onset_date = as.Date(onset_date, format="%d-%b-%y"), 
+         onset_date = if_else(dlt_patient ==0, bizdays::offset(start_date, 28), onset_date), 
+         onset_date = if_else(is.na(onset_date), start_date, onset_date)) %>% 
+  distinct(patient_id, dose_level, dlt_patient, start_date, onset_date) %>% 
+  pivot_longer(
+    cols = start_date:onset_date, 
+    names_to = "date_type",
+    values_to = "date"
+  ) %>% 
+  mutate(color = if_else((dlt_patient ==1 & date_type == "onset_date"), TRUE, FALSE))
+
+# add dose_level and ids
+id_column = 
+  plot_data %>% 
+  arrange(date) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(date)) %>% 
+  distinct(patient_id, earliest_date) %>% 
+  filter(earliest_date == 1) %>% 
+  tibble::rowid_to_column("id_by_entry") %>% 
+  select(id_by_entry, patient_id)
+
+plot_data = left_join(plot_data, id_column, by = "patient_id")
+
+text_labels = 
+  plot_data %>% 
+  group_by(id_by_entry) %>% 
+  summarise(
+    x = max(date), 
+    y = max(id_by_entry), 
+    text = max(dose_level))
+
+plot_data %>% 
+  ggplot(aes(x = date, y = id_by_entry)) +
+  geom_point(aes(shape = color, color = color)) +
+  theme(legend.position = "") +
+  geom_line(aes(group = id_by_entry)) +
+  scale_shape_manual(values = c(20, 4)) +
+  scale_color_manual(values = c("black", "red")) +
+  geom_text(data = text_labels, 
+            aes(x = as.Date(x), y = y, label= text), size=2.5, hjust = -.5) +
+  labs(
+    x= "Date", 
+    y = "id")
+
+# seems like starts off well but get confused with lots of 1.75 dlts 
+  
+# removes rows - probabaly from NA onset dates 
+# next read papers she sent
+
+
+```
+

@@ -1,0 +1,245 @@
+---
+title: "Untitled"
+author: "Rebecca Silva"
+date: "12/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dfcrm)
+```
+
+Note: Rmd uses enviroment from "define_dlt.Rmd"
+
+
+# Get arguments from data 
+```{r}
+n = nrow(data_dose %>% distinct(patient_id))
+doses = c(0.25, 0.8, 1, 1.2, 1.45, 1.75, 1.9)
+
+# vec of pt doses in order 
+dose_level = 
+  left_join(patient_doses, start_date, by = "patient_id") %>%  
+  arrange(start_date) %>% 
+  pull(dose_level)
+
+# get dose number from dose level - matches dose_level to doses 
+dose_number = match(dose_level, doses)
+
+#vector of pt outcomes 
+tox = left_join(dlt_data, id_column, by = "patient_id") %>% 
+  arrange(id_by_entry) %>% 
+  distinct(patient_id, dlt_patient) %>% 
+  pull(dlt_patient)
+```
+
+
+```{r}
+# get prior function 
+
+# arguments: 
+halfwidth = 0.05
+nu = 4 # prior guess of mtd 
+target = 0.30 # prob experience DLT 
+nlevel = length(doses)
+
+# DLT prob for each dose level 
+prior = getprior(halfwidth, target, nu, nlevel, model = "empiric")
+```
+
+# run crm
+```{r}
+# using full data - recommended next dose # = 5 (1.45)
+x = crm(prior, target, tox, dose_number, n = n)
+
+crm(prior, target, tox, dose_number, n = n, include = 1:10)
+
+
+# find recommended next dose after each patient 
+output = vector("list", length = n )
+dose_recommended = c()
+for ( i in 1:n){ 
+  output[[i]] = dfcrm::crm(prior, target, tox, dose_number, 
+             n = n, 
+             include = 1:i)
+  dose_recommended = c(dose_recommended, output[[i]]$mtd)
+}
+
+# convert dose_recommended (number) back to dose_level to compare
+dose_level_rec = doses[dose_recommended]
+
+dose_level_rec = prepend(dose_level_rec, 1.45) # since rec is for next pt need to add 
+dose_level_rec = dose_level_rec[-41] # only need 39 recs because 40 pts
+
+# compare dose_level_rec to true dose_level
+df = tibble(
+  dose_rec = dose_level_rec,
+  dose = dose_level
+)
+
+ggplot(df, aes(x = dose, y = dose_rec)) + 
+  geom_point()  
+ #geom_abline(0, 1, color= "red")
+
+```
+
+
+# make plot of recommended doses 
+```{r}
+names(dose_level_rec) = c(1:length(dose_level_rec))
+rec = as.data.frame(cbind(id_column %>% pull(id_by_entry), dose_level_rec))
+colnames(rec) = c("id_by_entry", "dose_level_rec")
+with_id = left_join(id_column, rec, by = "id_by_entry")
+
+crm_dlt_data = left_join(dlt_data, with_id, by = "patient_id")
+
+crm_dlt_data %>%
+  distinct(patient_id, dose_level_rec, dlt_patient, start_date) %>% 
+  ggplot(aes(x = start_date, y = dose_level_rec)) + 
+  geom_point(aes(shape = 4, color = as.factor(dlt_patient)), position = position_jitter(w = 0, h = .01)) +
+  scale_shape_identity() +
+  scale_color_manual(values = c("black", "red")) +
+  scale_y_continuous(
+    breaks = c(0.25, 0.80, 1.0, 1.20, 1.45, 1.75, 1.90), 
+    labels = c("0.25", "0.80", "1.0", "1.20", "1.45", "1.75", "1.90")) +
+  labs(
+    x = "Time", 
+    y = "Dose Level"
+  ) +
+  theme(legend.position = "none") 
+```
+
+These recommended doses use true data for every "include" so not realistic since dlts occured on different doses than what is shown. SO instead, we next want to simulate the crm. 
+
+Phats will be based on percentage that experienced dlt at each dose. And then we modify to make it monotonic. 
+
+```{r}
+# get initial p-hats 
+true_phat_df = 
+  dlt_data %>% 
+  distinct(patient_id, dlt_patient, dose_level) %>% 
+  group_by(dose_level) %>% 
+  summarize(p_hat = sum(dlt_patient)/n()) 
+
+#%>% 
+ # filter( dose_level != 1.9) # take out 1.9 for more steep curve 
+
+
+# graph 
+true_phat_df %>% 
+  ggplot(aes( x = dose_level, y = p_hat)) +
+  geom_point()
+
+# fit quadratic?
+# second order polynomial:
+x = true_phat_df %>% pull(dose_level)
+y = true_phat_df %>% pull(p_hat)
+p = plot(x,y)
+fit = lm(y ~ poly(x, 2, raw = TRUE))
+lines(dose_level, predict(fit, data.frame(x= dose_level)),col="red")
+  
+```
+Second order model: p_hat = -0.008697  - 0.060469(dose_level) + 0.144603(dose_level)^2 
+
+NOW: (without 1.9): 
+
+```{r}
+# get estimated p_hats
+est_phat = vector("list", length = length(doses) )
+index = 1
+for (i in doses){
+  est_phat[index] = -0.008697 - 0.060469*i + 0.144603*i^2 
+  index = index + 1
+}
+est_phat= unlist(est_phat)
+est_phat[1] = 0.001 # prob cant be negative
+
+
+# try isotonic regression (monotonically increasing fn)
+fit = isoreg(x, y)
+plot(fit)
+est_phat_iso = fit$yf
+```
+
+Q: confused if doing 3+3 desgin with crm or 
+```{r}
+# use crmsim for cohorts of size 3
+# PI = true tox probabilities (but ive modified too) 
+crmsim(PI = est_phat_iso, prior, target = .25, n = 39, x0 = 1, nsim = 100, mcohort = 3, restrict = TRUE,
+count = TRUE, method = "bayes", model = "empiric",
+scale = sqrt(1.34), seed = 1009)
+
+# order: 3, 6, 6, 9, 6, 0 - 
+
+## too conservative with second order polynomial? (est_phat). mtd is 5 (1.45) selected 50% of time, 1.75 selected 30% of time (100 sims). target = .25
+
+# all conservative for isotonic regression. mtd is 5 (1.45) chosed .48% and 6 (1.75) chosen .38% of the time 
+```
+
+
+```{r}
+# compare to crm mtd with full data 
+crm(prior, target = .25, unname(tox), dose_number, n = n) # mtd = 5
+```
+
+Table data:
+```{r}
+# do sim and crm with table data 
+table_df = 
+  tibble(
+  dose_level = doses, 
+  n_dlts = c(0, 0, 0, 1, 0, 5, 4), 
+  true_prob_dlt = c(0, 0, 0, 1/6, 0, 5/13, 7/13)
+  )
+
+fit_table = isoreg(table_df$true_prob_dlt)
+est_phat_tbl = fit_table$yf
+
+# simulation
+crmsim(PI = est_phat_tbl, prior, target = .25, n = 39, x0 = 1, nsim = 100, mcohort = 3, restrict = TRUE,
+count = TRUE, method = "bayes", model = "empiric",
+scale = sqrt(1.34), seed = 1009) # choses dose number 6 (1.75), 63% 
+
+# compare
+crm(prior, target = .25, unname(tox), dose_number, n = n) # mtd = 5
+
+```
+
+
+
+```{r}
+# use 3+3 design and see where dose assignment differs
+
+# check structures 
+dose_level; tox
+
+
+output = vector("list", length = n )
+dose_recommended = c()
+for ( i in 1:13){ 
+  output[[i]] = dfcrm::crm(prior, target = .25, unname(tox), dose_number, 
+             n = n, 
+             include = 1:3*i) 
+  dose_recommended = c(dose_recommended, output[[i]]$mtd)
+}
+
+crm(prior, target, unname(tox), dose_number, 
+             n = n, 
+             include = 1:19)
+
+# .25 (3) --> .8 (3) --> 1.0 (3) ---> 1.2(6) ---> 1.45 (4) ---> 1.75(3) * differs here because jumps to 1.9 and not 1.75 and also does 4 on 1.45 but included this 
+
+```
+
+```{r}
+# crmsim does this for us
+n_dlt = c()
+for (i in 1:7){
+  bin_sim = rbinom(3, size = 100, est_phat[i])
+  n_dlt[i] = sum(bin_sim)
+}
+```
+
+Starting titecrm: 
+go to tite_crm.rmd 

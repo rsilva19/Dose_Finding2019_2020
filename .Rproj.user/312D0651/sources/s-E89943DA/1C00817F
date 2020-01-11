@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1575751624648.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "1C00817F",
+    "lastKnownWriteTime" : 1578421951,
+    "last_content_update" : 1578421951516,
+    "path" : "~/Desktop/CU_Fall19/Research_Fall19/Dose_Finding_Fall2019/dfcrm_bortez.Rmd",
+    "project_path" : "dfcrm_bortez.Rmd",
+    "properties" : {
+        "cursorPosition" : "63,14",
+        "scrollLine" : "59",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

@@ -1,0 +1,222 @@
+---
+title: "Bortezomib"
+author: "Rebecca Silva"
+date: "11/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+data_dose = 
+  readxl::read_excel("./data/Protocol0047Dose.xlsx", 
+                          range = "A1:K337") %>%
+  janitor::clean_names() 
+
+data_tox = 
+  readxl::read_excel("./data/Protocol0047Tox.xlsx", 
+                          range = "A1:O580") %>%
+  janitor::clean_names() %>% 
+  rename(patient_id = patient)
+
+bortezomib = 
+  left_join(data_tox, data_dose, by = c("patient_id", "protocol", "course_number")) 
+```
+
+
+
+# Scrap
+
+```{r}
+plot2_data = 
+  data_dlt %>% 
+  select(patient_id, course_start_date, onset_date, dlt) %>% 
+  mutate(date1 = as.Date(course_start_date, format="%d-%b-%y"), 
+         onset_date = as.Date(onset_date, format="%d-%b-%y"), 
+         date2 = if_else(dlt == 0 ,
+                        bizdays::offset(date1, 28),
+                        onset_date)) %>% 
+  arrange(date1) %>% 
+  select( - c(course_start_date, onset_date)) %>% 
+  distinct() %>% 
+  pivot_longer(
+    date1:date2, 
+    names_to = "date") 
+
+
+plot2 = 
+  data_dlt %>% 
+  select(patient_id, course_start_date, onset_date, dlt, course_number) %>% 
+  mutate(date1 = ifelse(course_number == 1, course_start_date, NA)) %>% #distinguish start day 
+ # filter(!is.na(date1)) %>% 
+  mutate(date1 = as.Date(date1, format="%d-%b-%y"), 
+         onset_date = as.Date(onset_date, format="%d-%b-%y"), 
+         date2 = if_else(dlt == 0 ,
+                        bizdays::offset(date1, 28),
+                        onset_date))
+#
+
+%>% 
+  arrange(date1) %>% 
+  select( - c(course_start_date, onset_date, -course_number)) %>% 
+  distinct() %>% 
+  pivot_longer(
+    date1:date2, 
+    names_to = "date") 
+
+
+
+  
+entry_date = 
+  data_tox %>% 
+  filter(course_number ==1) %>% 
+  mutate(entry = as.Date(course_start_date, format="%d-%b-%y")) %>% 
+  select(patient_id, entry) %>% 
+  distinct(patient_id, entry) %>% 
+  arrange(entry) %>% 
+  mutate(id_by_day = 1:nrow(.))
+
+hyp = left_join(plot2, entry_date, by = "patient_id")
+
+omg = hyp %>%
+  #arrange(date1) %>% 
+  select( - c(course_start_date, onset_date, course_number)) %>% 
+  distinct() %>% 
+  pivot_longer(
+    date2:entry, 
+    names_to = "date") 
+
+data = data_dlt %>% 
+  select(patient_id, onset_date, dlt) %>% 
+  mutate(onset_date = as.Date(onset_date, format="%d-%b-%y")) %>% 
+  group_by(patient_id) %>% 
+  mutate(first_ae = min_rank(onset_date)) %>% 
+  mutate(dlt_ever = sum(dlt)) %>% 
+  filter( first_ae ==1) %>% 
+  distinct()
+
+, 
+         dlt_and_first = ifelse(dlt_ever ==1, )) %>% 
+  
+  filter(if(dlt_ever == 0first_ae == 1)
+  
+
+ mutate(id_by_day = 1:nrow(.)) %>%
+   
+   
+%>% 
+  mutate(patient_id = str_sub(patient_id,start=-2))
+  
+```
+
+
+
+```{r}
+omg %>% 
+  ggplot(aes(x = value, y = id_by_day)) +
+  geom_point() 
+
+# need to use data_dlt instead of data_tox 
+```
+
+## starting again 
+
+
+```{r}
+  
+end_date_no_dlt = 
+  data_dlt %>% 
+  filter(patient_id %in% no_dlt_patients, course_number == 1) %>% 
+  mutate(date2 = bizdays::offset(as.Date(course_start_date, format="%d-%b-%y"), 28), 
+         dlt_ever = c(rep(0,nrow(.)))) %>% 
+  select(patient_id, date2, dlt_ever) %>% 
+  distinct()
+  
+end_dates_dlt = 
+  data_dlt %>% 
+  filter(!(patient_id %in% no_dlt_patients), dlt == 1) %>% # if paitent has dlt want to remove rows with dlt = 0 
+  mutate(date2 = as.Date(onset_date, format="%d-%b-%y"), 
+         dlt = c(rep(1, nrow(.)))) %>% 
+  select(patient_id, date2, dlt)  
+
+end_dates_all = 
+  bind_rows(end_date_no_dlt, end_dates_dlt) 
+
+
+entry_date = 
+  data_dlt %>% 
+  filter(course_number ==1) %>% 
+  mutate(entry = as.Date(course_start_date, format="%d-%b-%y")) %>% 
+  select(patient_id, entry) %>% 
+  distinct(patient_id, entry) %>% 
+  arrange(entry) %>% 
+  mutate(id_by_day = 1:nrow(.))
+
+all_dates = 
+  left_join(end_dates_all, entry_date, by = "patient_id")
+
+# add dose level
+dose_level_data = 
+  data_dose %>% 
+  select(patient_id, dose_level) %>% 
+  distinct()
+
+plot2_data = 
+  left_join(all_dates, dose_level_data)
+
+
+```
+
+
+# AGAIN 
+```{r}
+# since missing course_start_date for 7 will instead get start from drug_admin_Date
+entry_date2 = 
+  data_dose %>% 
+  mutate(entry = as.Date(drug_administration_date, format="%d-%b-%y"), 
+         dlt = c(rep(0,nrow(.)))) %>% # since filtered out no dlt entries for paitent w dlt (still want entry pt as no dlt)
+  distinct(patient_id, entry, dlt, dose_level) %>% 
+  arrange(entry) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(entry)) %>% 
+  filter(earliest_date == 1) %>% 
+  tibble::rowid_to_column("id_by_entry") %>% 
+  select(-earliest_date)
+
+end_date_no_dlt2 = 
+  entry_date2 %>% 
+  filter(patient_id %in% no_dlt_patients) %>% 
+  mutate(date2 = bizdays::offset(entry, 28)) %>% 
+  select(patient_id, date2, dlt)
+
+end_dates_dlt 
+
+end_dates_all = 
+  bind_rows(end_date_no_dlt2, end_dates_dlt) 
+
+all_dates = 
+  left_join(end_dates_all, entry_date2, by = "patient_id")
+
+
+
+please = all_dates %>%
+  pivot_longer(
+    c(date2,entry), 
+    names_to = "date") 
+```
+
+
+
+```{r}
+please %>% 
+  ggplot(aes(x = value, y = id_by_entry)) +
+  geom_point(aes(shape = as.factor(dlt_ever))) +
+  geom_line(aes(group = id_by_entry))
+```
+
+

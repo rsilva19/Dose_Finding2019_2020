@@ -1,0 +1,37 @@
+---
+title: "Scrap Code"
+author: "Rebecca Silva"
+date: "10/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# out of function
+```{r}
+ ## initialize params 
+  ptox = matrix(NA, nrow = n, ncol = length(prior))
+  recommended = x1p = y1p = rep(0,n)
+  
+  ## dose allocation procedure 
+  for (i in 1:n){
+    ## global vars 
+    x1p = c(prior[dose[1:i]])
+    y1p = tox[1:i]
+  
+   # post_dist = integrate(x*(exp(-x)*lik(x)/integrate(exp(-x)*lik(x), 0, Inf)))
+   # a = integrate(a*post_dist, 0, Inf)
+    a = integrate(crmft, 0, Inf)/integrate(crmh, 0, Inf)
+    ## matrix of est. probabilities of responses 
+    ptox[i,] = prior^a
+   
+    ## vector of recommended dose level
+    #recommended[i] = which(abs(ptox[i,]-target) == min(abs(ptox[i,]-target)))
+    recommended[i] = which.min(abs(ptox[i,]-target))
+  }
+```
+
+
+

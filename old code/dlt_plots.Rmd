@@ -1,0 +1,127 @@
+---
+title: "Untitled"
+author: "Rebecca Silva"
+date: "11/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# dlt plot 
+(revised code from plots.Rmd)
+```{r}
+# entry for those with ae events in first course (so have data on when they started)
+patients_ae = data_tox_dlt %>% 
+  filter(course_number == 1) %>% 
+  distinct(patient_id, course_start_date) %>% 
+  pull(patient_id)
+
+entry_ae = 
+  data_tox_dlt %>%
+  filter(course_number == 1, patient_id %in% patients_ae) %>% 
+  mutate(dlt_tox = ifelse(is.na(dlt_tox), 0, dlt_tox), 
+         date = as.Date(course_start_date, format="%d-%b-%y")) %>% 
+  distinct(patient_id, date, dlt_tox) %>% 
+  arrange(date) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(date)) %>% 
+  filter(earliest_date == 1, dlt_tox == 0) %>% 
+  select(-earliest_date) 
+
+entry_no_ae = 
+  data_tox_dlt %>%
+  filter(!(patient_id %in% patients_ae)) %>% 
+  mutate(dlt_tox = ifelse(is.na(dlt_tox), 0, dlt_tox), 
+         date = as.Date(drug_administration_date, format="%d-%b-%y")) %>% 
+  distinct(patient_id, date, dlt_tox) %>% 
+  arrange(date) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(date)) %>% 
+  filter(earliest_date == 1, dlt_tox == 0) %>% 
+  select(-earliest_date) 
+
+entry = bind_rows(entry_ae, entry_no_ae)
+
+# patients w no dlts ever 
+no_dlt_patients = 
+  data_tox_dlt %>% 
+  mutate(dlt_tox = ifelse(is.na(dlt_tox), 0, dlt_tox)) %>%
+  group_by(patient_id) %>% 
+  summarise(dlt_sum = sum(dlt_tox)) %>% 
+  mutate(dlt_ever = ifelse(dlt_sum == 0, 0, 1)) %>% 
+  filter(dlt_ever == 0) %>% 
+  pull(patient_id) # make vector of patient_ids
+
+# end = 2 weeks after entry if no dlt 
+end_date_no_dlt = 
+  entry %>% 
+  filter(patient_id %in% no_dlt_patients) %>% 
+  mutate(date = bizdays::offset(date, 28)) %>% 
+  select(patient_id, date, dlt_tox)
+
+end_dates_dlt = 
+  data_tox_dlt %>% 
+  filter(!(patient_id %in% no_dlt_patients), dlt_tox == 1) %>% # if paitent has dlt want to remove rows with dlt = 0 
+  mutate(date = as.Date(onset_date, format="%d-%b-%y")) %>% 
+  distinct(patient_id, date, dlt_tox)  %>% 
+  filter(!(is.na(date))) #  9909-N033 removed - may have to add to no dlts
+
+dates_all = 
+  bind_rows(end_date_no_dlt, end_dates_dlt, entry) 
+
+# add dose_level and ids
+id_column = 
+  dates_all %>% 
+  arrange(date) %>%
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(date)) %>% 
+  distinct(patient_id, earliest_date) %>% 
+  filter(earliest_date == 1) %>% 
+  tibble::rowid_to_column("id_by_entry") %>% 
+  select(id_by_entry, patient_id)
+
+# already have 'patient_doses'
+#dose_level_column = 
+  data_dose %>% 
+  select(patient_id, dose_level) %>% # some paatient got more than one dose -- choosing smaller dose
+  group_by(patient_id) %>% 
+  mutate(earliest_date = min_rank(dose_level)) %>%
+  distinct(patient_id, dose_level, earliest_date) %>% 
+  filter(earliest_date == 1) %>% 
+  select(-earliest_date)
+
+merge1 = left_join(dates_all, id_column, by = "patient_id") 
+final = left_join(merge1, patient_doses, by = "patient_id")
+```
+
+# plots 
+```{r}
+text_labels = 
+  final %>% 
+  group_by(patient_id) %>% 
+  summarise(
+    x = max(date), 
+    y = max(id_by_entry), 
+    text = max(dose_level))
+  
+# main plot
+final %>% 
+  ggplot(aes(x = date, y = id_by_entry)) +
+  geom_point(aes(shape = as.factor(dlt_tox), color = as.factor(dlt_tox))) +
+  theme(legend.position = "") +
+  geom_line(aes(group = id_by_entry)) +
+  scale_shape_manual(values = c(20, 4)) +
+  scale_color_manual(values = c("black", "red")) +
+  geom_text(data = text_labels, 
+            aes(x = as.Date(x), y = y, label= text), size=2.5, hjust = -.5) +
+  labs(
+    x= "Date", 
+    y = "id")
+
+
+# FIX: should be more dlts.. check 1.9 people 
+
+```
+

@@ -1,0 +1,147 @@
+---
+title: "3+3"
+author: "Rebecca Silva"
+date: "10/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 3+3 Design: 
++ start w 3 patients at dose level X
+-- if no DLT : proceed to dose level X + 1 with 3 new patients
+-- if 1 DLT : add 3 to dose level X
+-- if 2 or more DLTs: stop dose escalation, proceed to dose level X - 1 with 3 patients or if X = 1 stop 
+-- if 1 or more of additional patients have DLT and only 3 evaluated at dose level X - 1, add 3 to X-1. If not, trial ends. 
+
+# CRM model 
+
+Copied code: - change norm to unif and skeleton to p_0
+addition file from https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/s12874-018-0638-z#MOESM1
+
+https://uvatrapps.shinyapps.io/crmb/
+https://uvatrapps.shinyapps.io/crmb/
+http://faculty.virginia.edu/model-based_dose-finding/ - might have something on simulations (code)
+
+Number of doses; 
+  Dose range needs to allow for accurate estimation of MTD. Spacing allow important. 
+
+
+Dose-toxicity model; F(B, d) where B is parameter, and d is vector of dose labels
+* the dose label for the ith dose is di such that pi = F(β*, di)
+# model describes prob of DLT as given dose - will use Power model 
+
+# Givens:
+```{r}
+# number of doses
+n_levels = 6
+dose = c(10, 20, 40, 80, 120, 160)
+# set probability of experiencing DLT (TTL) btwn 20% - 35%
+TTL<-0.30 
+# prior belief is that dose level 4 is the MTD
+mtd<-4 
+
+# initial prior DLT probs
+p_0 = c(0.02, 0.065, 0.10, 0.20, 0.33, 0.65) # dose toxicity skeleton (expected DLT probabilities at each dose level- spec. by clinicians)
+
+# prior distribution ‘beta’
+beta = runif(n = 1e6) 
+# mean prior 
+prior_beta = mean(beta)
+
+# dose label for the ith dose is di such that pi = F(β*, di) (B* = prior)
+dose_label = p_0^(1/exp(prior_beta)) 
+
+# list of prior distributions for probability of DLT per dose level
+prob_dist = lapply(1:n_levels, function(x) (dose_label[x])^(exp(prior_beta))) #(same as prior_beta but for future p's as well)
+```
+ 
+Inference:
+
+
+Data from patients in the trial are used to update the prior distribution (prob_dist) on the model parameter(s), which then gives a posterior distribution for the model parameter(s) and therefore posterior beliefs for the probability of DLT at each dose. These posterior probabilities are used to make dose escalation decisions: 
+** the dose level for next patient is the dose associated with the posterior toxicity prob closest to the target, p (.3)
+
+Starting dose of CRM can be the prior estimate of MTD (4)
+
+ We may adapt the dose for the next patient or cohort by estimating the probability of DLT for each dose level, whether from a likelihood-based or Bayesian approach, and then choosing the dose level using a specified decision rule. 
+ 
+```{r}
+# power function
+f = function(i , param){ # how to incorporate x? x = fn of dose x = {(x(1), y1),...(x(j), yj)}
+  return(p[i]^exp(param)) # returns yi (response outcome for ith patient)
+}
+
+# likelyhood fn
+lik_index = 1
+lik = function( x, beta){ # y[j] is jth patient response/outcome (I would make up y[j] ie 1 or 0)
+  for( r in 1:j){
+  product = lik_index*(f(r, beta))^y[r]*(1-f(r, beta))^(1-y[r])
+  lik_index = product
+  }
+}
+# before integration, find min and max of param - i used percentiles 
+param_min = quantile(beta, .025)
+param_max = quantile(beta, 0.975)
+# bayes formula for post
+post_dist = lik(x, param)* prior_beta/ (integrate(lik(x, param)* prior_beta, lower = param_min, upper = param_max))
+
+post_mean = mean(post_dist)
+
+# actualized values of toxic prob at each dose level di (new p)
+# make list for i dose levels, j patients 
+for(j in 1:num_patients){
+  for (i in 1:n_levels){
+  p[i] = f(i, post_mean)
+  }
+}
+
+
+num_patients = 3 # num of patients
+```
+*** left off above 
+ 
+ 
+ 
+Decision rules; choosing the dose with an estimated probability of DLT closest to the TTL. 
+Theorectical: minarg(distance btwn actualized prob and p= F(x(i), B))
+ 
+```{r}
+# decision rule = choose dose with an estimated prob of DLT closest to the TTL 
+p_closest = which.min(abs(p[num_patients]-TTL))
+dose_index = match(p_closest, p[num_patients])
+
+# give next patient dose= dose_index 
+x[num_patients + 1] = dose_label[dose_index]
+```
+ 
+*** still need to specify responses and create loop / first test our with one patient 
+
+Sample size and cohort size;
+```{r}
+n = 24
+```
+
+Safety modifications;
+Stopping rules.
+Examples of stopping rules: 
+a fixed number of patients have been consecutively dosed at one dose level [49]; the estimated probability of all dose levels having a DLT rate above (or below) the TTL is at least 90% [57, 58]; the width of the likelihood-based confidence interval or Bayesian credible interval for the MTD reaches a particular level [10]; the probability that the next m patients to be dosed in the trial will be given the same dose level, regardless of DLT outcomes observed, exceeds some level (e.g., 90%) [10, 56, 59]; or any combination of these [54]. 
+```{r}
+# stopping rule = stop when say 5 patients have been consecutively dosed at one dose level 
+
+```
+
+Scenarios to simulate: 
+The dose-toxicity scenarios used in the simulation study should include: scenarios where each dose is in fact the MTD; two extreme scenarios, in which the lowest dose is above the MTD and the highest dose is below the MTD; and any others that clinicians believe are plausible. 
+
+Questions: 
+- how does the main function incorporate the function of x's if the pwr fn p^exp(B) does not include x? 
+- the credibility interval to find minBeta/theta and max_param
+- where does 1.34 for var of B come from (its in all models as default and says "normal prior")
+
+
+
+
+
